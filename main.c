@@ -1,0 +1,456 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <time.h>
+#include <ncurses.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <locale.h>
+#include <ncursesw/ncurses.h>
+#include "ScoreTable.h"
+#include "game_menu.h"
+#include "music.h"
+#include "Move.h"
+
+
+int is_password_valid(const char *password) {
+    int has_upper = 0, has_lower = 0, has_digit = 0, has_specialchar = 0;
+
+    if (strlen(password) < 7) {
+        return 0;
+    }
+
+    for (int i = 0; password[i]; i++) {
+        if (isupper(password[i])) has_upper = 1;
+        if (islower(password[i])) has_lower = 1;
+        if (isdigit(password[i])) has_digit = 1;
+        if (strchr("!@#$%^&*()-_+=<>?.:;'~`[]{}/", password[i])) has_specialchar = 1;
+    }
+
+    return has_upper && has_lower && has_digit && has_specialchar;
+}
+
+int is_email_valid(const char *email) {
+    const char *at = strchr(email, '@');
+    const char *dot = strrchr(email, '.');
+
+    return at && dot && at < dot + 1 && at != email && dot != email + strlen(email) - 1;
+}
+
+int is_duplicate(const char *input, int column_index) {
+    char file_line[200];
+    char username[50], email[100];
+    FILE *file = fopen("/home/selma/Desktop/Project/Phase1/Users' Info/users.txt", "r");
+
+    if (!file) return 0; //if file doesn't exist, it means he/she is the first user, so no duplicates:)
+
+    fgets(file_line, 200, file);
+    fgets(file_line, 200, file);
+
+    while (fgets(file_line, 200, file)) {
+        sscanf(file_line, "%20s %25s", username, email);
+
+        if ((column_index == 1 && strcmp(input, username) == 0) || (column_index == 2 && strcmp(input, email) == 0)) {
+            fclose(file);
+            return 1;
+        }
+    }
+
+    fclose(file);
+    return 0;
+}
+
+void generate_random_password(char *password, int length) {
+    const char *characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_+=<>?.:;'~`[]{}/";
+    int num_characters = strlen(characters);
+
+    for (int i = 0; i < length; i++) {
+        password[i] = characters[get_random_number(0, num_characters - 1)];
+    }
+    password[length] = '\0';
+}
+
+
+char get_current_datetime(char *buffer, size_t size) {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    strftime(buffer, size - 1, "%Y-%m-%d %H:%M", t);
+}
+
+char *sign_up(WINDOW *win, int COLS, int LINES, char *username) {
+    char email[100], password[50], confirm_password[50];
+    char saved_username[50], saved_email[100];
+    char file_line[200];
+    int username_found = 0, email_found = 0;
+    int y_offset = LINES / 2 - 4;
+    char info_file_path[1024]; // Increased buffer size to avoid truncation
+
+    while (1) {
+        wclear(win);
+        box(win, 0, 0);
+
+        y_offset = LINES / 2 - 4;
+        
+        mvwprintw(win, y_offset, (COLS - 25) / 2, "Enter Your Username: ");
+        wrefresh(win);
+        echo();
+        wgetstr(win, username);
+        noecho();
+
+        FILE *file = fopen("Users' Info/user_data.txt", "r");
+
+        fgets(file_line, 200, file);
+        fgets(file_line, 200, file);
+
+        username_found = 0;
+        while (fgets(file_line, 200, file)) {
+            sscanf(file_line, "%49s %99s", saved_username, saved_email);
+            if (strcmp(username, saved_username) == 0) {
+                username_found = 1;
+                break;
+            }
+        }
+        fclose(file);
+
+        if (username_found) {
+            mvwprintw(win, y_offset + 1, (COLS - 25) / 2, "Username already exists. Try another one.");
+            wrefresh(win);
+            getch();
+            continue;
+        }
+
+        y_offset += 2;
+        mvwprintw(win, y_offset, (COLS- 25) / 2, "Enter Your Email: ");
+        wrefresh(win);
+        echo();
+        wgetstr(win, email);
+        noecho();
+
+        if (!is_email_valid(email)) {
+            mvwprintw(win, y_offset + 1, (COLS - 25) / 2, "Email is not valid.");
+            getch();
+            continue;
+        }
+
+        file = fopen("Users' Info/user_data.txt", "r");
+        fgets(file_line, 200, file);
+        fgets(file_line, 200, file);
+
+        email_found = 0;
+        while (fgets(file_line, 200, file)) {
+            sscanf(file_line, "%49s %99s", saved_username, saved_email);
+            if (strcmp(email, saved_email) == 0) {
+                email_found = 1;
+                break;
+            }
+        }
+        fclose(file);
+
+        if (email_found) {
+            mvwprintw(win, y_offset + 1, (COLS - 25) / 2, "A user is already registered with this email. Log in instead.");
+            wrefresh(win);
+            getch();
+            continue;
+        }
+
+        char *options[] = {"Yes", "No"};
+        char *title = "Do you want to generate a random password?: ";
+
+        int pass_choice = menu(win, COLS, LINES, options, 2, title);
+        switch (pass_choice) {
+            case 0:
+                // random password
+                wmove(win, LINES / 2 - 3, 0);
+                wclrtoeol(win);
+                wmove(win, LINES / 2 - 1, 0);
+                wclrtoeol(win);
+                wmove(win, LINES / 2, 0);
+                wclrtoeol(win);
+
+                int length = get_random_number(7, 20);
+                generate_random_password(password, length);
+                mvwprintw(win, LINES / 2 - 1, (COLS - 25) / 2, "Your generated password is: ");
+                mvwprintw(win, LINES / 2, (COLS - 25) / 2, "%s", password);
+                getch();
+                mvwprintw(win, LINES / 2 + 4, (COLS - 25) / 2, "User created succesffully!");
+                break;
+            case 1:
+                while (1) {
+                    y_offset = LINES / 2 - 4;
+
+                    wmove(win, LINES / 2 - 3, 0);
+                    wclrtoeol(win);
+                    wmove(win, LINES / 2 - 1, 0);
+                    wclrtoeol(win);
+                    wmove(win, LINES / 2, 0);
+                    wclrtoeol(win);
+
+                    mvwprintw(win, LINES / 2 - 1, (COLS - 25) / 2, "Enter your password: ");
+                    echo();
+                    wgetstr(win, password);
+                    noecho();
+
+                    if (!is_password_valid(password)) {
+                        mvwprintw(win, LINES / 2, (COLS - 25) / 2, "Password does not meet criteria.");
+                        wrefresh(win);
+                        getch();
+                        continue;
+                    }
+
+                    mvwprintw(win, LINES / 2 , (COLS - 25) / 2, "Confirm your password: ");
+                    echo();
+                    wgetstr(win, confirm_password);
+                    noecho();
+
+                    if (strcmp(password, confirm_password) != 0) {
+                        wmove(win, LINES / 2 + 1, 0);
+                        wclrtoeol(win);
+
+                        mvwprintw(win, LINES / 2 + 1, (COLS - 25) / 2, "Passwords do not match. Try again.");
+                        getch();
+                        wmove(win, LINES / 2 + 1, (COLS - 25) / 2);
+                        wclrtoeol(win);
+                        wrefresh(win);
+                        continue;
+                    } else {
+                        mvwprintw(win, LINES / 2 + 4, (COLS - 25) / 2, "User created successfully!");
+                        break;
+                    }
+                }
+                break;
+        }
+
+        // Save the user data to the file if the password is valid
+        file = fopen("Users' Info/user_data.txt", "a");
+        if (file) {
+            fprintf(file, "%-20s %-25s %-20s\n", username, email, password);
+            fclose(file);
+            getch();
+        }
+
+        // Creating a folder for the user
+        char folder_path[512];
+        snprintf(folder_path, sizeof(folder_path), "Users' Info/%s", username);
+        mkdir(folder_path, 0777);
+
+        // Create the info.txt file in the user's folder
+        char info_file_path[100];
+        char login_datetime[64];
+        get_current_datetime(login_datetime, sizeof(login_datetime));
+        snprintf(info_file_path, sizeof(info_file_path), "Users' Info/%s/info.txt", username);
+        FILE *info_file = fopen(info_file_path, "w");
+        if (info_file) {
+            fprintf(info_file, "%s 0 0 0 %s", username, login_datetime);
+            fclose(info_file);
+        }
+
+        char game_file_path[100];
+        snprintf(game_file_path, sizeof(game_file_path), "Users' Info/%s/map.txt", username);
+        FILE *game_file = fopen(game_file_path, "w");
+        if (game_file) {
+            fprintf(game_file, " ");
+            fclose(game_file);
+        }
+
+        wrefresh(win);
+        getch();
+        break;
+    }
+    return username;
+}
+
+char *login(WINDOW *win, int COLS, int LINES, char *username) {
+    char password[50], saved_username[50], saved_email[100], saved_password[50];
+    char file_line[200];
+    int username_found = 0;
+    int user_found = 0;
+    int y_offset = LINES / 2 - 4;
+
+    wclear(win);
+    box(win, 0, 0);
+
+    y_offset = LINES / 2 - 4;
+
+    mvwprintw(win, y_offset, (COLS - 25) / 2, "Enter your Username: ");
+    wrefresh(win);
+    echo();
+    wgetstr(win, username);
+    noecho();
+
+    y_offset += 2;
+
+    FILE *file = fopen("Users' Info/user_data.txt", "r");
+
+    while (fgets(file_line, 200, file)) {
+        sscanf(file_line, "%49s %99s %49s", saved_username, saved_email, saved_password);
+
+        if (strcmp(username, saved_username) == 0) {
+            username_found = 1;
+            break;
+        }
+    }
+
+    if (!username_found) {
+        mvwprintw(win, y_offset + 1, (COLS - 25) / 2, "Username not found. Please sign up first.");
+        wrefresh(win);
+        getch();
+    } else {
+        mvwprintw(win, y_offset + 2, (COLS - 25) / 2, "Enter your Password: ");
+        wrefresh(win);
+        echo();
+        wgetstr(win, password);
+        noecho();
+
+        if (strcmp(password, saved_password) == 0) {
+            user_found = 1;
+            mvwprintw(win, y_offset + 5, (COLS - 25) / 2, "Login successful! Welcome %s.", username);
+            wrefresh(win);
+            getch();
+            return username;
+        } else {
+            mvwprintw(win, y_offset + 3, (COLS - 25) / 2, "Invalid password. Do you want to reset your password?");
+            wrefresh(win);
+
+            // Y/N options
+            int reset_choice = 0;
+            char *options[] = {"Yes", "No"};
+            int num_options = sizeof(options) / sizeof(options[0]);
+
+            while (1) {
+                for (int i = 0; i < num_options; i++) {
+                    if (i == reset_choice) {
+                        wattron(win, A_REVERSE);
+                        mvwprintw(win, y_offset + 4 + i, (COLS - strlen(options[i])) / 2, "%s", options[i]);
+                        wattroff(win, A_REVERSE);
+                    } else {
+                        mvwprintw(win, y_offset + 4 + i, (COLS - strlen(options[i])) / 2, "%s", options[i]);
+                    }
+                }
+                wrefresh(win);
+                int ch = wgetch(win);
+
+                switch (ch) {
+                    case KEY_UP:
+                        if (reset_choice > 0) reset_choice--;
+                        break;
+                    case KEY_DOWN:
+                        if (reset_choice < num_options - 1) reset_choice++;
+                        break;
+                    case 10: // enter key
+                        if (reset_choice == 0) { // yes
+                            mvwprintw(win, y_offset + 6, (COLS - 25) / 2, "Enter your Email: ");
+                            wrefresh(win);
+                            char email[100];
+                            echo();
+                            wgetstr(win, email);
+                            noecho();
+
+                            if (strcmp(email, saved_email) != 0) {
+                                mvwprintw(win, y_offset + 7, (COLS - 25) / 2, "Email not registered. Try again.");
+                                wrefresh(win);
+                                getch();
+                            } else {
+                                mvwprintw(win, y_offset + 8, (COLS - 25) / 2, "A verification code has been sent to your email.");
+                                mvwprintw(win, y_offset + 9, (COLS - 25) / 2, "Enter Code: ");
+                                wrefresh(win);
+                                char ver_code[20];
+                                echo();
+                                wgetstr(win, ver_code);
+                                noecho();
+
+                                // for simplicity, I assume the entered verification code is correct.
+                                mvwprintw(win, y_offset + 10, (COLS - 25) / 2, "Enter your new Password: ");
+                                wrefresh(win);
+                                char new_password[50];
+                                echo();
+                                wgetstr(win, new_password);
+                                noecho();
+
+                                // updating the file with the new password
+                                FILE *file_temp = fopen("Users' Info/user_temp.txt", "w");
+                                rewind(file);
+                                while (fgets(file_line, 200, file)) {
+                                    sscanf(file_line, "%49s %99s %49s", saved_username, saved_email, saved_password);
+
+                                    if (strcmp(username, saved_username) == 0) {
+                                        fprintf(file_temp, "%s                %s               %s\n", saved_username, saved_email, new_password);
+                                    } else {
+                                        fprintf(file_temp, "%s", file_line);
+                                    }
+                                }
+
+                                fclose(file);
+                                fclose(file_temp);
+
+                                // replacing the original file with the updated file
+                                remove("Users' Info/user_data.txt");
+                                rename("Users' Info/user_temp.txt", "Users' Info/user_data.txt");
+
+                                mvwprintw(win, y_offset + 12, (COLS - 25) / 2, "Password reset successfully.");
+                                return username;
+                                wrefresh(win);
+                                getch();
+                            }
+                        } else { // no
+                            wrefresh(win);
+                            getch();
+                        }
+                        return 0;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+
+    fclose(file);
+}
+
+int main() {
+    setlocale(LC_ALL, "");
+    srand(time(NULL));
+
+    initscr();
+    noecho();
+    cbreak();
+    keypad(stdscr, TRUE);
+    curs_set(0);
+
+    WINDOW *win = newwin(LINES, COLS, 0, 0);
+    refresh();
+
+    int choice;
+    char *choices[] = {"Sign Up", "Log In", "Guest", "Exit"};
+    char *title = "Sign up or log in to your account to continue.";
+    char username[50];
+    char *user_authenticated = NULL;
+
+    while (user_authenticated == NULL) {  // Wait until user is authenticated
+        choice = menu(win, COLS, LINES, choices, 4, title);
+
+        switch (choice) {
+            case 0:  // Sign Up
+                user_authenticated = sign_up(stdscr, COLS, LINES, username);
+                break;
+            case 1:  // Log In
+                user_authenticated = login(stdscr, COLS, LINES, username);
+                break;
+            case 2:  // Guest
+                strcpy(username, "Guest");
+                user_authenticated = username;  // Treat guest as authenticated
+                break;
+            case 3:  // Exit
+                endwin();
+                return 0;
+            default:
+                break;
+        }
+    }
+
+    // Now, the username is set, either from sign_up/login or as "Guest"
+    display_game_menu(user_authenticated);
+
+    endwin();
+    return 0;
+}
