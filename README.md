@@ -247,3 +247,8 @@ gcc main.c -o rogue -lncursesw -lm -lSDL2 -lSDL2_mixer -g
 
 For testing and demonstration purposes, this repository includes a small set of pre-generated user accounts inside the Users' Info/ directory.
 These accounts were randomly created to simulate leaderboard activity and show example statistics such as usernames, scores, and progress.
+
+
+## Screenshots
+
+[Click here to view the Gameplay Screenshots (PDF)](Rogue.pdf)
