@@ -249,6 +249,8 @@ For testing and demonstration purposes, this repository includes a small set of 
 These accounts were randomly created to simulate leaderboard activity and show example statistics such as usernames, scores, and progress.
 
 
-## Screenshots
+## Gameplay Preview
 
-[Click here to view the Gameplay Screenshots (PDF)](Rogue.pdf)
+[![Game Preview](preview.png)](Rogue.pdf)
+
+*Click the image above to view the full PDF with all screenshots.*
